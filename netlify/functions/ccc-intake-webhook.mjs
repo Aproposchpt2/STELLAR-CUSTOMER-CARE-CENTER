@@ -4,7 +4,9 @@
 //             Returns dynamic variables: caller_number, known_caller_name.
 //   start     start_session tool: {action:"start", callerPhone, conversationId}
 //             Opens a voice interaction. Returns {interactionId, transferAllowed}.
-//   submit    submit_lead tool: {action:"submit", interactionId, businessName, callerName,
+//   submit    submit_lead tool: {action:"submit", interactionId, businessName?, callerName,
+//             (callers are the demo business's customers, so businessName is optional and
+//             defaults to the business they called; serviceInterest is the request type)
 //             email, phone, serviceInterest, description, conversationId, callerPhone}
 //             If start_session was skipped, conversationId opens the interaction here.
 //             Completes the interaction and creates the lead (or updates it on a repeat
@@ -20,6 +22,8 @@ import { envShape,
 
 const TRANSFER_ALLOWED = (process.env.SS_TRANSFER_ALLOWED || 'no').toLowerCase() === 'yes' ? 'yes' : 'no';
 const NOTIFY_EMAIL = 'jmitchell@aproposgroupllc.com';
+// Fictional business the CCC agent answers for (Stellar Tires and Brakes demo).
+const DEMO_BUSINESS = process.env.CCC_DEMO_BUSINESS || 'Stellar Tires and Brakes (customer)';
 const NOT_INTERESTED = /^(not interested|none|no interest|n\/a)$/i;
 
 export const handler = async (event) => {
@@ -99,12 +103,12 @@ async function start(body) {
 async function submit(body) {
   let interactionId = text(body.interactionId, 60);
   const callerName = text(body.callerName, 200);
-  const businessName = text(body.businessName, 200);
+  const businessName = text(body.businessName, 200) || DEMO_BUSINESS;
   const email = normalizeEmail(body.email);
   const serviceInterest = text(body.serviceInterest, 300);
   const description = text(body.description, 4000);
 
-  const missing = [!callerName && 'callerName', !businessName && 'businessName'].filter(Boolean);
+  const missing = [!callerName && 'callerName'].filter(Boolean);
   if (missing.length) return reply(200, { ok: false, error: 'MISSING_FIELDS', missing });
   // start_session was skipped: open the interaction for this conversation now rather
   // than losing the lead. Needs the conversation id the tool sends.
@@ -193,7 +197,7 @@ async function notifyOwner(f) {
     body: JSON.stringify({
       from, to: to.split(',').map((s) => s.trim()).filter(Boolean),
       ...(f.email ? { reply_to: f.email } : {}),
-      subject: `New Customer Care Center lead: ${f.businessName}`,
+      subject: `New Customer Care Center request: ${f.serviceInterest} — ${f.callerName}`,
       text: `Jordan captured a new lead on the Customer Care Center line. It's in Lead Management.\n\n` +
         `Name: ${f.callerName}\nBusiness: ${f.businessName}\nPhone: ${f.phone || '-'}\nEmail: ${f.email || '-'}\n` +
         `Interest: ${f.serviceInterest}\n\n${f.description || ''}\n`,

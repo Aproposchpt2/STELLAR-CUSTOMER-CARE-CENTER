@@ -117,7 +117,7 @@ test('not-interested calls are kept as nurture leads', async () => {
 test('missing name or business tells the agent what to ask for', async () => {
   const [, st] = await post({ action: 'start', conversationId: 'conv_6' });
   const [s, b] = await post({ action: 'submit', interactionId: st.interactionId, callerName: '' });
-  assert.equal(s, 200); assert.equal(b.ok, false); assert.deepEqual(b.missing, ['callerName', 'businessName']);
+  assert.equal(s, 200); assert.equal(b.ok, false); assert.deepEqual(b.missing, ['callerName']);
   assert.equal(F.T.ai4cc_leads.length, 0);
 });
 
@@ -146,6 +146,14 @@ test('synthetic checks use an opaque identifier', async () => {
   await post({ action: 'submit', interactionId: st.interactionId, callerName: 'Synthetic', businessName: 'Synthetic', email: 'x@y.com' });
   assert.equal(F.T.ai4cc_contacts[0].idType, 'opaque');
   assert.equal(F.T.ai4cc_interactions[0].metadata.synthetic, true);
+});
+
+test('a customer request needs no business name and is logged for the demo business', async () => {
+  const [, st] = await post({ action: 'start', conversationId: 'cust1', callerPhone: '+17025550111' });
+  const [s, b] = await post({ action: 'submit', interactionId: st.interactionId, callerName: 'Daniel Reyes', phone: '+17025550111', serviceInterest: 'Brake inspection appointment', description: '2019 Toyota Camry, grinding when braking, prefers Tuesday morning.' });
+  assert.equal(s, 200); assert.equal(b.ok, true);
+  assert.equal(F.T.ai4cc_interactions[0].metadata.businessName, 'Stellar Tires and Brakes (customer)');
+  assert.equal(F.T.ai4cc_leads.length, 1);
 });
 
 test('every request needs the CCC secret; unset secret refuses all', async () => {
