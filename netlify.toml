@@ -5,7 +5,7 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   # The Supabase project URL is public (used in browser code); it is also a fallback in
   # netlify/functions/lib/ccc-store.mjs, so secret scanning must not treat it as a secret.
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL"
