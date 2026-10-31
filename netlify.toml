@@ -1,6 +1,7 @@
+# STELLAR CCC public website. The former Business Center source remains in this repository,
+# but only ccc-site is published. Legacy scripts are not part of the CCC build.
 [build]
-  command = "node scripts/apply-registered-federal-contractors-portal-links.cjs && node scripts/validate-registered-federal-contractors-portal-links.cjs && node scripts/validate-nevada-readiness-wave1.cjs && node scripts/apply-nebc-ga4.cjs && node scripts/validate-nebc-ga4.cjs"
-  publish = "."
+  publish = "ccc-site"
   functions = "netlify/functions"
 
 [build.environment]
