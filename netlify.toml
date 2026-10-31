@@ -16,3 +16,21 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+[functions."ccc-intake-webhook"]
+  timeout = 20
+
+# ElevenLabs tools for the Customer Care Center agent (start_session, submit_lead).
+# Requires CCC_INTAKE_WEBHOOK_SECRET in the x-intake-secret header.
+[[redirects]]
+  from = "/api/ccc/intake"
+  to = "/.netlify/functions/ccc-intake-webhook"
+  status = 200
+  force = true
+
+# ElevenLabs post-call webhook (HMAC signed with ELEVENLABS_POSTCALL_SECRET).
+[[redirects]]
+  from = "/api/ccc/postcall"
+  to = "/.netlify/functions/ccc-postcall-webhook"
+  status = 200
+  force = true

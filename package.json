@@ -1,0 +1,9 @@
+{
+  "name": "stellar-customer-care-center",
+  "version": "1.0.0",
+  "private": true,
+  "description": "STELLAR Customer Care Center site and ElevenLabs webhooks for the CCC agent (Jordan)",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test tests/ccc-intake-webhook.test.mjs" },
+  "dependencies": { "@supabase/supabase-js": "^2.49.8" }
+}
