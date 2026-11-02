@@ -37,3 +37,36 @@
   to = "/.netlify/functions/ccc-postcall-webhook"
   status = 200
   force = true
+
+# Simulation Testing panel (same system as the PMA, Specialist and Sales sites).
+[functions."ops-admin-api"]
+  timeout = 26
+
+[[redirects]]
+  from = "/api/ops/*"
+  to = "/.netlify/functions/ops-admin-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/admin/testing/script/*"
+  to = "/admin/testing-history.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/admin/testing"
+  to = "/admin/testing.html"
+  status = 200
+
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/api/ops/*"
+  [headers.values]
+    Cache-Control = "no-store"
+    X-Robots-Tag = "noindex, nofollow"

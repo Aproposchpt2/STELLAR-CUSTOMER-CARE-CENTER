@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Script History | Stellar Intelligent Technologies</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&family=Syncopate&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/admin/ops-admin.css">
+</head>
+<body>
+<div class="ribbon"><span>STELLAR INTELLIGENT TECHNOLOGIES</span><span id="ribbon-site">SIMULATION TESTING · ADMIN</span></div>
+
+<div id="login-screen" style="display:none">
+  <div class="login-wrap"><div class="login-card">
+    <h1>Testing Admin</h1>
+    <p>Enter your email to receive a sign-in code.</p>
+    <input class="field-input" id="login-email" type="email" autocomplete="email" placeholder="you@example.com" style="margin-bottom:12px">
+    <button class="btn-primary" style="width:100%" id="send-code">Send Sign-In Code</button>
+    <div id="code-step" style="display:none;margin-top:16px">
+      <input class="field-input" id="login-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code from your email" style="margin-bottom:12px">
+      <button class="btn-primary" style="width:100%" id="verify-code">Sign In</button>
+    </div>
+    <p class="login-msg" id="login-msg" role="status"></p>
+  </div></div>
+</div>
+
+<div id="app" class="hist-shell" style="display:none">
+  <div class="hist-top">
+    <a class="back" id="back" href="/admin/testing">← Back to directory</a>
+    <div class="hist-user"><button class="btn-sm" id="h-dl">Download JSON</button><span id="user-email"></span><button class="btn-sm" id="sign-out">Sign out</button></div>
+  </div>
+  <header class="hist-head">
+    <div class="meta-row" id="h-meta"></div>
+    <h1 id="h-title">History report</h1>
+    <p class="desc" id="h-desc"></p>
+  </header>
+  <section class="hist-stats" id="h-stats"></section>
+  <div id="h-error" class="err-box" role="alert" style="display:none"></div>
+  <section>
+    <div class="section-sep">Every run, newest first</div>
+    <div id="h-runs" class="runs"><p class="muted">Loading…</p></div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
+<script src="/admin/ops-admin.js"></script>
+<script>
+const { esc, ago, dur, fmtDate, statusOf, isOpen, trigger, api } = OpsAdmin;
+const slug = decodeURIComponent((location.pathname.match(/\/admin\/testing\/script\/([^/?#]+)/) || [])[1] || new URLSearchParams(location.search).get('slug') || '');
+const PRODUCT = { support: 'Specialist', sales: 'Sales', pma: 'PMA' };
+let expanded = new Set(); let timer = null; let script = null; let runs = [];
+
+document.getElementById('back').href = '/admin/testing' + (slug ? '?script=' + encodeURIComponent(slug) : '');
+OpsAdmin.boot({ onReady: load });
+
+async function load() {
+  clearTimeout(timer);
+  const err = document.getElementById('h-error');
+  if (!slug) { err.textContent = 'No script given.'; err.style.display = ''; return; }
+  try {
+    const d = await api(`/api/ops/scripts/${encodeURIComponent(slug)}/runs?limit=200`);
+    script = d.script; runs = d.runs || [];
+    err.style.display = 'none';
+    render();
+    if (runs.some(isOpen)) timer = setTimeout(load, 4000);
+  } catch (e) { err.textContent = e.message; err.style.display = ''; document.getElementById('h-runs').innerHTML = ''; }
+}
+
+function render() {
+  document.title = `${script.name} | History`;
+  document.getElementById('h-title').textContent = script.name;
+  document.getElementById('h-desc').textContent = script.description || '';
+  document.getElementById('h-meta').innerHTML = `<span class="tag">${esc(PRODUCT[script.product] || script.product)}</span><span class="tag">${esc(script.layer)}</span><span class="muted mono">${esc(script.slug)}</span>`;
+
+  const done = runs.filter((r) => !isOpen(r));
+  const last30 = done.slice(0, 30);
+  const passes = last30.filter((r) => r.status === 'pass').length;
+  const rate = last30.length ? Math.round((passes / last30.length) * 100) : null;
+  const strip = last30.slice().reverse().map((r) => `<span class="strip-cell ${esc(r.status)}" title="${esc(fmtDate(r.started_at))} · ${esc(r.status)}"></span>`).join('');
+  const durs = done.map((r) => r.duration_ms).filter((n) => n != null);
+  const avg = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : null;
+  document.getElementById('h-stats').innerHTML = `
+    <div class="stat"><span class="stat-num">${rate == null ? '—' : rate + '%'}</span><span class="stat-label">Pass rate · last ${last30.length || 30} runs</span></div>
+    <div class="stat"><span class="stat-num">${runs.length}</span><span class="stat-label">Runs shown</span></div>
+    <div class="stat"><span class="stat-num">${avg == null ? '—' : esc(dur(avg))}</span><span class="stat-label">Average duration</span></div>
+    <div class="strip-wrap"><span class="stat-label">Oldest → newest</span><div class="strip">${strip || '<span class="muted small">No completed runs yet</span>'}</div></div>`;
+
+  const list = document.getElementById('h-runs');
+  if (!runs.length) { list.innerHTML = '<div class="empty-sm">No runs yet. Run it from the directory.</div>'; return; }
+  list.innerHTML = runs.map((r) => {
+    const st = statusOf(r); const open = expanded.has(String(r.id));
+    return `<div class="run ${open ? 'open' : ''}">
+      <button class="run-row" data-id="${esc(r.id)}" aria-expanded="${open}">
+        <span class="dot ${st}"></span>
+        <span class="run-date">${esc(fmtDate(r.started_at))}<small>${esc(ago(r.started_at))}</small></span>
+        <span class="res ${st}">${isOpen(r) ? 'RUNNING' : esc(st.toUpperCase())}</span>
+        <span class="run-dur">${isOpen(r) ? '<span class="spin"></span>' : esc(dur(r.duration_ms))}</span>
+        <span class="run-trig">${esc(trigger(r.triggered_by))}</span>
+        <span class="run-sum">${esc((r.summary || '').slice(0, 140))}</span>
+      </button>
+      ${open ? `<div class="run-detail">${OpsAdmin.runDetail(r, script)}${r.detail ? `<details class="raw"><summary>Raw detail</summary><pre>${esc(JSON.stringify(r.detail, null, 2))}</pre></details>` : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('h-dl').addEventListener('click', () => {
+  const done = runs.filter((r) => !isOpen(r)); const last30 = done.slice(0, 30);
+  const by = (st) => done.filter((r) => r.status === st).length;
+  OpsAdmin.download(`ops-${slug}-history-${OpsAdmin.stamp()}.json`, OpsAdmin.report(script ? 'history' : 'error', {
+    script_slug: slug,
+    script,
+    stats: script ? {
+      runs: runs.length, pass: by('pass'), fail: by('fail'), error: by('error'), warn: by('warn'), open: runs.length - done.length,
+      pass_rate_last_30: last30.length ? Math.round((last30.filter((r) => r.status === 'pass').length / last30.length) * 100) : null,
+      failing_since: (() => { let i = 0; while (i < done.length && done[i].status !== 'pass') i++; return i ? done[i - 1].started_at : null; })(),
+    } : null,
+    runs: runs.map(OpsAdmin.explainRun),
+    page_error: document.getElementById('h-error').style.display === 'none' ? null : document.getElementById('h-error').textContent,
+  }));
+});
+
+document.getElementById('h-runs').addEventListener('click', (e) => {
+  const b = e.target.closest('.run-row'); if (!b) return;
+  const id = b.dataset.id; expanded.has(id) ? expanded.delete(id) : expanded.add(id); render();
+});
+</script>
+</body></html>

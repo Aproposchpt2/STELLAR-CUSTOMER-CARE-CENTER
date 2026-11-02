@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulation Testing | Stellar Intelligent Technologies</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&family=Syncopate&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/admin/ops-admin.css">
+</head>
+<body class="ops-app">
+<div class="ribbon"><span>STELLAR INTELLIGENT TECHNOLOGIES</span><span id="ribbon-site">SIMULATION TESTING · ADMIN</span></div>
+
+<div id="login-screen" style="display:none">
+  <div class="login-wrap"><div class="login-card">
+    <h1>Testing Admin</h1>
+    <p>Enter your email to receive a sign-in code.</p>
+    <input class="field-input" id="login-email" type="email" autocomplete="email" placeholder="you@example.com" style="margin-bottom:12px">
+    <button class="btn-primary" style="width:100%" id="send-code">Send Sign-In Code</button>
+    <div id="code-step" style="display:none;margin-top:16px">
+      <input class="field-input" id="login-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code from your email" style="margin-bottom:12px">
+      <button class="btn-primary" style="width:100%" id="verify-code">Sign In</button>
+    </div>
+    <p class="login-msg" id="login-msg" role="status"></p>
+  </div></div>
+</div>
+
+<div id="app" class="ops-shell" style="display:none">
+  <aside class="ops-left" aria-label="Site tests">
+    <div class="ops-left-top">
+      <h1 class="ops-title" id="site-title">Simulation Testing</h1>
+      <div class="filter-group health-wrap"><span class="field-label">Health</span>
+        <div id="health"></div>
+        <button class="btn-primary run-all" id="run-all">Run all tests</button>
+        <button class="btn-sm dl-btn stress-btn" id="run-stress" title="25 concurrent synthetic calls against this site, then cleanup">Stress test</button>
+        <p class="run-all-msg" id="run-all-msg" role="status"></p>
+        <button class="btn-sm dl-btn" id="dl-failures" title="Every failing or warning script with its latest run, as JSON">Download failure report (JSON)</button>
+        <button class="btn-sm dl-btn" id="dl-all" title="Every script on this site with its latest run, as JSON">Download full report (JSON)</button>
+      </div>
+      <div class="filter-group overview-wrap"><span class="field-label">All sites</span>
+        <div id="overview"></div>
+      </div>
+    </div>
+    <div class="ops-left-foot">
+      <span id="user-email"></span>
+      <a class="btn-sm" href="/">Back to site</a>
+      <button class="btn-sm" id="sign-out">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="ops-main">
+    <div class="ops-main-head">
+      <input class="field-input search" id="search" type="search" placeholder="Search scripts" aria-label="Search scripts">
+      <span class="count" id="count"></span>
+    </div>
+    <div id="banner" class="banner" role="alert" style="display:none"></div>
+    <div class="table-wrap">
+      <table class="ops-table">
+        <thead><tr><th class="c-dot"><span class="sr">Status</span></th><th>Script</th><th class="c-layer">Layer</th><th class="c-when">Last run</th><th class="c-result">Last result</th><th class="c-dur">Duration</th><th class="c-run"><span class="sr">Run</span></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="d-title">
+  <div class="drawer-head"><h2 id="d-title"></h2><button class="btn-sm" id="d-close">Close</button></div>
+  <div class="drawer-body" id="d-body"></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
+<script src="/admin/ops-admin.js"></script>
+<script>
+const S = { product: null, scripts: [], overview: {}, q: '', open: null, pending: {}, timer: null, loading: false };
+const PRODUCT = { support: 'Specialist', sales: 'Sales', pma: 'PMA' };
+const SITE = { support: 'https://specialist.stellaruc.com', sales: 'https://sales.stellaruc.com', pma: 'https://pma.stellaruc.com' };
+
+OpsAdmin.boot({
+  onReady: () => { loadScripts(); const slug = new URLSearchParams(location.search).get('script'); if (slug) openDrawer(slug); },
+});
+
+document.getElementById('search').addEventListener('input', (e) => { S.q = e.target.value.trim().toLowerCase(); render(); });
+document.getElementById('run-all').addEventListener('click', runAll);
+document.getElementById('run-stress').addEventListener('click', runStress);
+document.getElementById('dl-failures').addEventListener('click', () => directoryReport(true));
+document.getElementById('dl-all').addEventListener('click', () => directoryReport(false));
+
+function directoryReport(failingOnly) {
+  const rows = (failingOnly ? S.scripts : visible()).map((s) => ({ ...s, status: rowStatus(s) }))
+    .filter((s) => !failingOnly || ['fail', 'error', 'warn'].includes(s.status));
+  OpsAdmin.download(`ops-${S.product || 'site'}-${failingOnly ? 'failures' : 'report'}-${OpsAdmin.stamp()}.json`, OpsAdmin.report(failingOnly ? 'failures' : 'directory', {
+    product: S.product,
+    search: failingOnly ? null : (S.q || null),
+    health: counts(),
+    all_sites: S.overview,
+    script_count: rows.length,
+    scripts: rows.map(({ latest_run, ...script }) => ({ script, latest_run: OpsAdmin.explainRun(latest_run) })),
+    last_banner: document.getElementById('banner').textContent || null,
+  }));
+}
+document.getElementById('d-close').addEventListener('click', closeDrawer);
+document.getElementById('overlay').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+document.getElementById('rows').addEventListener('click', (e) => {
+  const run = e.target.closest('[data-run]');
+  if (run) { e.stopPropagation(); runScript(run.dataset.run); return; }
+  const tr = e.target.closest('tr[data-slug]'); if (tr) openDrawer(tr.dataset.slug);
+});
+document.getElementById('rows').addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr[data-slug]');
+  if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDrawer(tr.dataset.slug); }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadScripts(); });
+
+const { esc, ago, dur, fmtDate, statusOf, isOpen, api } = OpsAdmin;
+
+function banner(msg) { const b = document.getElementById('banner'); b.textContent = msg || ''; b.style.display = msg ? '' : 'none'; }
+
+async function loadScripts() {
+  if (S.loading) return; S.loading = true;
+  try {
+    const d = await api('/api/ops/scripts');
+    S.product = d.product; S.scripts = d.scripts || []; S.overview = d.overview || {};
+    document.getElementById('site-title').textContent = `${PRODUCT[S.product] || ''} Testing`;
+    document.title = `${PRODUCT[S.product] || ''} Testing | Stellar Intelligent Technologies`;
+    banner('');
+    // Clear optimistic "pending" once newer rows have landed.
+    for (const [kind, since] of Object.entries(S.pending)) {
+      const group = S.scripts.filter((s) => (kind === 'stress' ? s.is_stress : s.layer === 'backend' && !s.is_stress));
+      const caught = group.every((s) => s.latest_run && new Date(s.latest_run.started_at) >= new Date(since - 5000));
+      if (caught || Date.now() - since > 90000) delete S.pending[kind];
+    }
+    render();
+    if (S.open) refreshDrawer();
+  } catch (err) { banner(err.message); }
+  finally { S.loading = false; schedule(); }
+}
+
+function schedule() {
+  clearTimeout(S.timer);
+  const busy = Object.keys(S.pending).length || S.scripts.some((s) => isOpen(s.latest_run));
+  S.timer = setTimeout(loadScripts, busy ? 4000 : 60000);
+}
+
+function rowStatus(s) {
+  if (s.is_stress && S.pending.stress) return 'running';
+  if (!s.is_stress && s.layer === 'backend' && S.pending.backend) return 'running';
+  return statusOf(s.latest_run);
+}
+
+function visible() {
+  return S.scripts.filter((s) => !S.q || `${s.name} ${s.slug} ${s.description || ''}`.toLowerCase().includes(S.q));
+}
+
+function counts() {
+  const c = { pass: 0, fail: 0, warn: 0, running: 0, never: 0 };
+  S.scripts.filter((s) => !s.is_stress && s.enabled !== false).forEach((s) => {
+    const st = rowStatus(s);
+    if (st === 'pass') c.pass++; else if (st === 'fail' || st === 'error') c.fail++; else if (st === 'warn') c.warn++;
+    else if (st === 'running' || st === 'queued') c.running++; else c.never++;
+  });
+  return c;
+}
+
+function render() {
+  const list = visible().sort((a, b) => (a.is_stress ? 1 : 0) - (b.is_stress ? 1 : 0));
+  document.getElementById('count').textContent = `${list.length} of ${S.scripts.length} scripts`;
+  const tb = document.getElementById('rows');
+  if (!S.scripts.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No scripts for this site yet.</td></tr>'; }
+  else if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No scripts match your search.</td></tr>'; }
+  else tb.innerHTML = list.map((s) => {
+    const r = s.latest_run; const st = rowStatus(s); const running = st === 'running' || st === 'queued';
+    return `<tr data-slug="${esc(s.slug)}" tabindex="0" class="${S.open === s.slug ? 'sel' : ''}${s.enabled === false ? ' off' : ''}${s.is_stress ? ' stress-row' : ''}">
+      <td class="c-dot"><span class="dot ${st}" title="${esc(st)}"></span></td>
+      <td><div class="s-name">${esc(s.name)}</div><div class="s-slug">${esc(s.slug)}${s.enabled === false ? ' · disabled' : ''}</div></td>
+      <td class="c-layer"><span class="tag">${esc(s.is_stress ? 'stress' : s.layer)}</span></td>
+      <td class="c-when">${r ? esc(ago(r.started_at)) : '<span class="muted">Never</span>'}</td>
+      <td class="c-result">${running ? '<span class="spin" aria-hidden="true"></span> Running' : r ? `<span class="res ${st}">${esc(st.toUpperCase())}</span> <span class="muted">${esc((r.summary || '').slice(0, 90))}</span>` : '<span class="muted">No runs yet</span>'}</td>
+      <td class="c-dur">${r && !running ? esc(dur(r.duration_ms)) : ''}</td>
+      <td class="c-run"><button class="btn-sm" data-run="${esc(s.slug)}" ${running || s.enabled === false ? 'disabled' : ''}>${running ? '<span class="spin"></span>' : 'Run'}</button></td>
+    </tr>`;
+  }).join('');
+  renderHealth();
+}
+
+function renderHealth() {
+  const c = counts();
+  document.getElementById('health').innerHTML = `<div class="health-row"><span class="h-name">${esc(PRODUCT[S.product] || '')}</span><span class="h-pass" title="Passing">${c.pass}</span><span class="h-fail" title="Failing">${c.fail}</span><span class="h-warn" title="Warning">${c.warn}</span>${c.never ? `<span class="h-never" title="Never run">${c.never}</span>` : ''}</div>`
+    + '<div class="health-key"><span class="h-pass">pass</span><span class="h-fail">fail</span><span class="h-warn">warn</span><span class="h-never">never</span></div>';
+  const stress = S.scripts.find((s) => s.is_stress);
+  const sb = document.getElementById('run-stress');
+  sb.style.display = stress ? '' : 'none';
+  sb.disabled = !stress || rowStatus(stress) === 'running';
+  sb.textContent = stress && rowStatus(stress) === 'running' ? 'Stress test running…' : 'Stress test';
+  // Read-only health of every site, with links to each site's own panel.
+  document.getElementById('overview').innerHTML = ['support', 'sales', 'pma'].map((p) => {
+    const o = S.overview[p] || {}; const here = p === S.product;
+    const label = here ? `<span class="h-name">${PRODUCT[p]} <span class="muted">(this site)</span></span>` : `<a class="h-name" href="${SITE[p]}/admin/testing">${PRODUCT[p]} ↗</a>`;
+    return `<div class="health-row">${label}<span class="h-pass" title="Passing">${o.pass || 0}</span><span class="h-fail" title="Failing">${o.fail || 0}</span><span class="h-warn" title="Warning">${o.warn || 0}</span></div>`;
+  }).join('');
+}
+
+async function runScript(slug, msgEl) {
+  const s = S.scripts.find((x) => x.slug === slug); if (!s) return;
+  const setMsg = (t) => { if (msgEl) msgEl.textContent = t; else if (t) banner(t); };
+  setMsg('Starting…');
+  try {
+    const d = await api('/api/ops/run', { method: 'POST', body: { slug } });
+    if (d.state === 'queued') S.pending[s.is_stress ? 'stress' : 'backend'] = Date.now();
+    setMsg(d.message || 'Running.');
+    if (!msgEl) setTimeout(() => banner(''), 4000);
+    await loadScripts();
+  } catch (err) { setMsg(err.message); }
+}
+
+async function runAll() {
+  const msg = document.getElementById('run-all-msg'); const btn = document.getElementById('run-all');
+  btn.disabled = true; msg.textContent = 'Starting…';
+  try {
+    const d = await api('/api/ops/run-all', { method: 'POST', body: {} });
+    if (d.backend?.state === 'queued') S.pending.backend = Date.now();
+    const parts = [];
+    if (d.agent.started) parts.push(`${d.agent.started} agent test${d.agent.started > 1 ? 's' : ''} started`);
+    if (d.agent.skipped.length) parts.push(`${d.agent.skipped.length} already running`);
+    if (d.agent.errors.length) parts.push(`${d.agent.errors.length} failed to start (${d.agent.errors[0].error})`);
+    if (d.backend.state !== 'none') parts.push(`Backend: ${d.backend.message}`);
+    msg.textContent = parts.join('. ') || 'Nothing to run.';
+    await loadScripts();
+  } catch (err) { msg.textContent = err.message; }
+  finally { btn.disabled = false; }
+}
+
+async function runStress() {
+  const msg = document.getElementById('run-all-msg');
+  msg.textContent = 'Starting stress test…';
+  try {
+    const d = await api('/api/ops/stress', { method: 'POST', body: {} });
+    S.pending.stress = Date.now();
+    msg.textContent = d.message || 'Stress test started.';
+    await loadScripts();
+  } catch (err) { msg.textContent = err.message; }
+}
+
+// ---------- Drawer ----------
+function openDrawer(slug) {
+  S.open = slug;
+  history.replaceState(null, '', `/admin/testing?script=${encodeURIComponent(slug)}`);
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('d-title').textContent = (S.scripts.find((s) => s.slug === slug) || {}).name || slug;
+  document.getElementById('d-body').innerHTML = '<p class="muted">Loading…</p>';
+  render(); refreshDrawer();
+}
+function closeDrawer() {
+  if (!S.open) return;
+  S.open = null; history.replaceState(null, '', '/admin/testing');
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+  render();
+}
+
+async function refreshDrawer() {
+  const slug = S.open; if (!slug) return;
+  const body = document.getElementById('d-body');
+  const keepMsg = document.getElementById('d-msg')?.textContent || '';
+  try {
+    const d = await api(`/api/ops/scripts/${encodeURIComponent(slug)}`);
+    if (S.open !== slug) return;
+    const s = d.script; const r = d.latest_run;
+    const pending = s.is_stress ? !!S.pending.stress : (s.layer === 'backend' && !!S.pending.backend);
+    const st = pending ? 'running' : statusOf(r);
+    const running = st === 'running' || st === 'queued';
+    document.getElementById('d-title').textContent = s.name;
+    body.innerHTML = `
+      <div class="meta-row"><span class="tag">${esc(PRODUCT[s.product] || s.product)}</span><span class="tag">${esc(s.is_stress ? 'stress' : s.layer)}</span>${s.enabled === false ? '<span class="tag warn">disabled</span>' : ''}<span class="muted mono">${esc(s.slug)}</span></div>
+      ${s.description ? `<p class="desc">${esc(s.description)}</p>` : ''}
+      ${s.layer === 'agent' ? OpsAdmin.agentSpec(s) : `<div class="field-row"><span class="field-label">Check key</span><span class="field-val mono">${esc(s.check_key || '—')}</span></div>`}
+      <div class="section-sep">Latest result</div>
+      ${r || pending ? `
+        <div class="result-head"><span class="dot ${st}"></span><span class="res ${st}">${running ? 'RUNNING' : esc(st.toUpperCase())}</span>${running ? '<span class="spin"></span>' : ''}</div>
+        ${r ? OpsAdmin.runDetail(r, s) : '<p class="muted">Queued. Results appear here as they land.</p>'}
+      ` : '<div class="empty-sm">No runs yet.</div>'}
+      ${s.is_stress ? '<p class="note">Sends 25 concurrent synthetic calls to this site, checks the database counts, then deletes every row it created. Runs only when you click it.</p>'
+        : s.layer === 'backend' ? '<p class="note">Backend scripts run together with this site\'s other backend checks so setup and cleanup stay paired.</p>' : ''}
+      <div class="drawer-actions">
+        <button class="btn-primary" id="d-run" ${running || s.enabled === false ? 'disabled' : ''}>${running ? 'Running…' : 'Run now'}</button>
+        <a class="btn-outline" href="/admin/testing/script/${encodeURIComponent(s.slug)}">View history report</a>
+        <button class="btn-sm" id="d-dl">Download JSON</button>
+      </div>
+      <p class="inline-msg" id="d-msg" role="status">${esc(keepMsg)}</p>`;
+    document.getElementById('d-run').addEventListener('click', () => runScript(s.slug, document.getElementById('d-msg')));
+    document.getElementById('d-dl').addEventListener('click', () => OpsAdmin.download(`ops-${s.slug}-${OpsAdmin.stamp()}.json`,
+      OpsAdmin.report('script', { script: s, latest_run: OpsAdmin.explainRun(r), backend_group_pending: !!pending })));
+  } catch (err) {
+    body.innerHTML = `<div class="err-box">${esc(err.message)}</div><div class="drawer-actions"><button class="btn-sm" id="d-retry">Try again</button><button class="btn-sm" id="d-dl-err">Download error report (JSON)</button></div>`;
+    document.getElementById('d-retry').addEventListener('click', refreshDrawer);
+    document.getElementById('d-dl-err').addEventListener('click', () => OpsAdmin.download(`ops-error-${slug}-${OpsAdmin.stamp()}.json`,
+      OpsAdmin.report('error', { script_slug: slug, error: err.message })));
+  }
+}
+</script>
+</body></html>

@@ -202,3 +202,14 @@ test('postcall rejects unsigned requests and logs signed ones', async () => {
   r = await postcall({ httpMethod: 'POST', headers: { 'elevenlabs-signature': sig.replace(/.$/, '0') }, body: raw });
   assert.equal(r.statusCode, 401);
 });
+
+test('lead titles name the request type', async () => {
+  const { leadTitle, requestType } = await import('../netlify/functions/ccc-intake-webhook.mjs');
+  assert.equal(leadTitle('Appointment request – brake inspection', ''), 'Appointment request: brake inspection');
+  assert.equal(leadTitle('Brake inspection', 'Wants to book Tuesday morning'), 'Appointment request: Brake inspection');
+  assert.equal(leadTitle('New tires', 'How much for four all-season tires?'), 'Quote request: New tires');
+  assert.equal(requestType('Car is making a grinding noise', 'stranded on the freeway, needs a tow'), 'Urgent request');
+  assert.equal(requestType('Unhappy with brake job', ''), 'Complaint');
+  assert.equal(requestType('Is my car ready', ''), 'Status update');
+  assert.equal(leadTitle('Alignment', ''), 'Service request: Alignment');
+});

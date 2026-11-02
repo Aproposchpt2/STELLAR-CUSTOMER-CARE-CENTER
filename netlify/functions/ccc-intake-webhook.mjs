@@ -20,6 +20,26 @@ import { envShape,
   db, reply, text, normalizePhone, normalizeEmail, isUuid, secretOk, allow, clientIp,
 } from './lib/ccc-store.mjs';
 
+// Lead title by request type, e.g. "Appointment request: Brake inspection". The type is read
+// from what the caller asked for; anything unrecognized is a general service request.
+const REQUEST_TYPES = [
+  ['Urgent request', /\b(urgent|emergency|asap|right away|immediately|stranded|tow(ing)?|unsafe)\b/i],
+  ['Complaint', /\b(complain\w*|unhappy|dissatisfied|refund|warranty claim|not fixed|came back)\b/i],
+  ['Appointment request', /\b(appointment|schedul\w*|book(ing)?|reschedul\w*|cancel\w*|drop.?off)\b/i],
+  ['Quote request', /\b(quote|estimate|pric(e|es|ing)|cost|how much)\b/i],
+  ['Status update', /\b(status|ready|update on|follow.?up|pick.?up)\b/i],
+  ['Question', /\b(question|hours|open|location|address|do you|information|info)\b/i],
+];
+export function requestType(interest, description) {
+  const text = `${interest || ''} ${description || ''}`;
+  return (REQUEST_TYPES.find(([, re]) => re.test(text)) || ['Service request'])[0];
+}
+export function leadTitle(interest, description) {
+  const type = requestType(interest, description);
+  const what = String(interest || '').replace(/^\s*(appointment request|quote request|service request)\s*[-:–—]\s*/i, '').trim();
+  return `${type}: ${what || 'Customer Care Center call'}`.slice(0, 160);
+}
+
 const TRANSFER_ALLOWED = (process.env.SS_TRANSFER_ALLOWED || 'no').toLowerCase() === 'yes' ? 'yes' : 'no';
 const NOTIFY_EMAIL = 'jmitchell@aproposgroupllc.com';
 // Fictional business the CCC agent answers for (Stellar Tires and Brakes demo).
@@ -162,7 +182,7 @@ async function submit(body) {
     p_tenant_id: TENANT_ID, p_actor_user_id: ACTOR_USER_ID, p_interaction_id: interactionId,
     p_identifier_type: idType, p_identifier_value: idValue, p_email: email, p_phone: phone,
     p_contact_name: callerName, p_company_name: businessName,
-    p_title: notInterested ? 'Customer Care Center call: not interested' : 'Customer Care Center voice lead',
+    p_title: notInterested ? 'Customer Care Center call: not interested' : leadTitle(fields.serviceInterest, description),
     p_service_interest: fields.serviceInterest, p_description: description || null,
     p_pipeline_stage: notInterested ? 'nurture' : 'new', p_priority: 'normal',
     p_score: notInterested ? 20 : 60, p_estimated_value: 0, p_probability: 0,
@@ -189,7 +209,7 @@ async function activity(leadId, type, subject, bodyText) {
 async function notifyOwner(f) {
   const key = process.env.RESEND_API_KEY;
   if (!key) return;
-  const from = process.env.CCC_RESEND_FROM_EMAIL || 'STELLAR Customer Care Center <notifications@stellaruc.com>';
+  const from = process.env.CCC_RESEND_FROM_EMAIL || 'Stellar Intelligent Business Systems <notifications@stellaruc.com>';
   const to = process.env.OWNER_NOTIFICATION_EMAIL || process.env.RESEND_TO_EMAIL || process.env.OWNER_EMAIL || NOTIFY_EMAIL;
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
