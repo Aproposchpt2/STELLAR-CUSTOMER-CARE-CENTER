@@ -1,5 +1,12 @@
 # CCC live demo agent: Stellar Registration & Title Services (fictional)
 
+
+Live source of truth: the ElevenLabs agent. After testing on 2026-11-02 the live prompt also
+holds the document checklists inline, a Dealer & Fleet Desk section, "submit_lead right after
+name and callback number", one question per turn, and the standard callback line ("A team
+member will call you back by the next business day"). Six ElevenLabs simulation tests
+(test_1801m6e2…, test_3401m6e2…, test_2901m6e2…, test_9201m6e2…, test_9501m6e2…,
+test_6501m6e2…) all pass with the tools mocked.
 Agent: agent_8601m69ppcekedxst5karygt63pm ("Jordan"), number (702) 710-8456.
 When applying: replace the Role, Language & style, Knowledge, Call flow and Safety sections
 below; KEEP the existing "# Tools" and "# Text message consent" sections verbatim.
