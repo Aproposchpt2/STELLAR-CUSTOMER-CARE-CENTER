@@ -20,14 +20,18 @@ import { envShape,
   db, reply, text, normalizePhone, normalizeEmail, isUuid, secretOk, allow, clientIp,
 } from './lib/ccc-store.mjs';
 
-// Lead title by request type, e.g. "Appointment request: Brake inspection". The type is read
-// from what the caller asked for; anything unrecognized is a general service request.
+// Lead title by request type, e.g. "Appointment request: title transfer". Categories are
+// generic customer-care types (any service or product business); the live demo business is
+// Stellar Registration & Title Services. Order matters: the first match wins.
 const REQUEST_TYPES = [
-  ['Urgent request', /\b(urgent|emergency|asap|right away|immediately|stranded|tow(ing)?|unsafe)\b/i],
-  ['Complaint', /\b(complain\w*|unhappy|dissatisfied|refund|warranty claim|not fixed|came back)\b/i],
-  ['Appointment request', /\b(appointment|schedul\w*|book(ing)?|reschedul\w*|cancel\w*|drop.?off)\b/i],
-  ['Quote request', /\b(quote|estimate|pric(e|es|ing)|cost|how much)\b/i],
-  ['Status update', /\b(status|ready|update on|follow.?up|pick.?up)\b/i],
+  ['Urgent request', /\b(urgent|emergency|asap|right away|immediately|today|expired|impound\w*|stranded|can'?t drive)\b/i],
+  ['Complaint', /\b(complain\w*|unhappy|dissatisfied|refund|mistake|error on|wrong|delay\w*)\b/i],
+  ['Dealer or fleet request', /\b(dealer\w*|fleet|bulk|multiple vehicles|\d+ (trucks|vehicles|cars))\b/i],
+  ['Mobile VIN inspection', /\b(vin (inspection|verification|check)|mobile (inspection|inspector)|come to (my|our))\b/i],
+  ['Appointment request', /\b(appointment|schedul\w*|book(ing)?|reschedul\w*|cancel\w*|come in|drop.?off)\b/i],
+  ['Quote request', /\b(quote|estimate|pric(e|es|ing)|cost|how much|fee)\b/i],
+  ['Status update', /\b(status|ready|update on|follow.?up|pick.?up|where is|done yet)\b/i],
+  ['Document checklist', /\b(what do i need|documents?|paperwork|checklist|requirements?|bring)\b/i],
   ['Question', /\b(question|hours|open|location|address|do you|information|info)\b/i],
 ];
 export function requestType(interest, description) {
@@ -42,8 +46,8 @@ export function leadTitle(interest, description) {
 
 const TRANSFER_ALLOWED = (process.env.SS_TRANSFER_ALLOWED || 'no').toLowerCase() === 'yes' ? 'yes' : 'no';
 const NOTIFY_EMAIL = 'jmitchell@aproposgroupllc.com';
-// Fictional business the CCC agent answers for (Stellar Tires and Brakes demo).
-const DEMO_BUSINESS = process.env.CCC_DEMO_BUSINESS || 'Stellar Tires and Brakes (customer)';
+// Fictional business the CCC agent answers for (Stellar Registration & Title Services demo).
+const DEMO_BUSINESS = process.env.CCC_DEMO_BUSINESS || 'Stellar Registration & Title Services (customer)';
 const NOT_INTERESTED = /^(not interested|none|no interest|n\/a)$/i;
 
 export const handler = async (event) => {

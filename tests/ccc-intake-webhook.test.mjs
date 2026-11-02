@@ -152,7 +152,7 @@ test('a customer request needs no business name and is logged for the demo busin
   const [, st] = await post({ action: 'start', conversationId: 'cust1', callerPhone: '+17025550111' });
   const [s, b] = await post({ action: 'submit', interactionId: st.interactionId, callerName: 'Daniel Reyes', phone: '+17025550111', serviceInterest: 'Brake inspection appointment', description: '2019 Toyota Camry, grinding when braking, prefers Tuesday morning.' });
   assert.equal(s, 200); assert.equal(b.ok, true);
-  assert.equal(F.T.ai4cc_interactions[0].metadata.businessName, 'Stellar Tires and Brakes (customer)');
+  assert.equal(F.T.ai4cc_interactions[0].metadata.businessName, 'Stellar Registration & Title Services (customer)');
   assert.equal(F.T.ai4cc_leads.length, 1);
 });
 
@@ -205,11 +205,15 @@ test('postcall rejects unsigned requests and logs signed ones', async () => {
 
 test('lead titles name the request type', async () => {
   const { leadTitle, requestType } = await import('../netlify/functions/ccc-intake-webhook.mjs');
-  assert.equal(leadTitle('Appointment request – brake inspection', ''), 'Appointment request: brake inspection');
-  assert.equal(leadTitle('Brake inspection', 'Wants to book Tuesday morning'), 'Appointment request: Brake inspection');
-  assert.equal(leadTitle('New tires', 'How much for four all-season tires?'), 'Quote request: New tires');
-  assert.equal(requestType('Car is making a grinding noise', 'stranded on the freeway, needs a tow'), 'Urgent request');
-  assert.equal(requestType('Unhappy with brake job', ''), 'Complaint');
-  assert.equal(requestType('Is my car ready', ''), 'Status update');
-  assert.equal(leadTitle('Alignment', ''), 'Service request: Alignment');
+  assert.equal(leadTitle('Title transfer', 'Wants to book Tuesday morning at Henderson'), 'Appointment request: Title transfer');
+  assert.equal(leadTitle('Appointment request - title transfer', ''), 'Appointment request: title transfer');
+  assert.equal(requestType('Registration expired', 'needs to drive today'), 'Urgent request');
+  assert.equal(requestType('Inherited vehicle', 'What do I need to transfer my late father\'s title?'), 'Document checklist');
+  assert.equal(requestType('Renewals', 'We have 12 trucks to renew'), 'Dealer or fleet request');
+  assert.equal(requestType('VIN inspection', 'Can an inspector come to my house?'), 'Mobile VIN inspection');
+  assert.equal(requestType('Registration packet', 'Is it done yet?'), 'Status update');
+  assert.equal(requestType('Fleet renewal service fee', 'how much'), 'Dealer or fleet request');
+  assert.equal(requestType('Notary', 'how much is it'), 'Quote request');
+  assert.equal(requestType('Paperwork', 'there was a mistake on my title'), 'Complaint');
+  assert.equal(leadTitle('Lien release', ''), 'Service request: Lien release');
 });
