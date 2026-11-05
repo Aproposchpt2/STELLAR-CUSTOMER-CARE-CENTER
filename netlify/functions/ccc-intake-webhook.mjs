@@ -213,7 +213,7 @@ async function activity(leadId, type, subject, bodyText) {
 async function notifyOwner(f) {
   const key = process.env.RESEND_API_KEY;
   if (!key) return;
-  const from = process.env.CCC_RESEND_FROM_EMAIL || 'Stellar Intelligent Business Systems <notifications@stellaruc.com>';
+  const from = process.env.CCC_RESEND_FROM_EMAIL || 'Stellar Intelligent Software Developers <notifications@stellaruc.com>';
   const to = process.env.OWNER_NOTIFICATION_EMAIL || process.env.RESEND_TO_EMAIL || process.env.OWNER_EMAIL || NOTIFY_EMAIL;
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
